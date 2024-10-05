@@ -2,10 +2,12 @@ package sheetshandler
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"reflect"
 	"strconv"
@@ -14,43 +16,39 @@ import (
 
 	"github.com/crush-on-anechka/ktn_stats/config"
 	"github.com/crush-on-anechka/ktn_stats/db"
+	"github.com/crush-on-anechka/ktn_stats/essentialshandler"
 	"github.com/crush-on-anechka/ktn_stats/sheetsclient"
-	"github.com/crush-on-anechka/ktn_stats/utils"
+	"google.golang.org/api/sheets/v4"
 )
 
 type SheetsHandler struct {
-	client  *sheetsclient.SheetsClient
-	storage *db.SqliteDB
+	client            *sheetsclient.SheetsClient
+	storage           *db.SqliteDB
+	essentialsHandler *essentialshandler.EssentialsHandler
 }
 
-func New(requestTimeout time.Duration) *SheetsHandler {
+func New(storage *db.SqliteDB,
+	requestTimeout time.Duration,
+	essentialsHandler *essentialshandler.EssentialsHandler,
+) (*SheetsHandler, error) {
+
 	client, err := sheetsclient.New(requestTimeout)
 	if err != nil {
-		utils.HandleError(err, config.SheetsErrorMsg)
-	}
-
-	storage, err := db.NewSqliteDB()
-	if err != nil {
-		utils.HandleError(err, "Failed to establish connection with database")
+		return nil, fmt.Errorf("failed to create Sheets client: %w", err)
 	}
 
 	return &SheetsHandler{
-		client:  client,
-		storage: storage,
-	}
-}
-
-func (handler *SheetsHandler) CloseDBconnection() {
-	handler.storage.DB.Close()
+		client:            client,
+		storage:           storage,
+		essentialsHandler: essentialsHandler,
+	}, nil
 }
 
 func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 	inputYearAsStr := strconv.Itoa(inputYear)
-
-	spreadsheet := handler.client.GetSpreadsheetByYear(inputYearAsStr)
-
-	if spreadsheet == nil {
-		return config.ErrCurYearSpreadsheet
+	spreadsheet, err := handler.client.GetSpreadsheetByYear(inputYearAsStr)
+	if err != nil {
+		return fmt.Errorf("failed to get spreadsheet by year %s: %w", inputYearAsStr, err)
 	}
 
 	for _, sheet := range spreadsheet.Sheets {
@@ -58,29 +56,43 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 		sheetName := sheet.Properties.Title
 
 		dateFromSheetName := config.DatePatternRegex.FindString(sheetName)
-
+		if sheetName == config.SheetNameAvailability {
+			dateFromSheetName = "00.00"
+		}
+		if sheetName == config.SheetNameUrgentOrders {
+			dateFromSheetName = "01.00"
+		}
 		if dateFromSheetName == "" {
 			continue
 		}
 
 		readRange := fmt.Sprintf("%s!%s", sheetName, config.Envs.SheetParseRange)
-
 		resp, err := handler.client.Service.Spreadsheets.Values.Get(
 			spreadsheet.SpreadsheetId, readRange).Do()
 		if err != nil {
-			utils.HandleError(err, "Failed to retrieve data from sheet")
+			return fmt.Errorf(
+				"failed to retrieve data from, sheet %s (%v): %w", sheetName, inputYear, err)
 		}
 
-		sheetHash := GenerateHash(resp.Values)
+		sheetHash, err := GenerateHash(resp.Values)
+		if err != nil {
+			return fmt.Errorf(
+				"failed to generate hash for sheet %s (%v): %w", sheetName, inputYear, err)
+		}
 
 		date := SerializeDate(dateFromSheetName, inputYearAsStr)
 
-		tx := handler.storage.BeginTransaction()
+		tx, err := handler.storage.BeginTransaction()
+		if err != nil {
+			return err
+		}
 
 		defer func() {
 			if p := recover(); p != nil {
 				tx.Rollback()
 				panic(p)
+			} else if err != nil {
+				tx.Rollback()
 			}
 		}()
 
@@ -89,131 +101,146 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 			if errors.Is(err, config.ErrNoRecordFound) {
 				handler.storage.CreateHashWithTx(tx, date, sheetHash)
 			} else {
-				utils.HandleError(err, "failed to retrieve hash")
+				return fmt.Errorf("failed to retrieve hash for date %s: %w", date, err)
 			}
 		}
-
 		if sheetHash == storedHash {
 			continue
 		}
-
-		handler.storage.DeleteDataByDateWithTx(tx, date)
-		handler.storage.UpdateHashWithTx(tx, date, sheetHash)
-
-		dataToBeStored := []*db.Data{}
-
-		fieldnamesSlice := []string{}
-		linkColumnExists := false
-		prevRowData := make(map[string]string)
-
-		for rowIdx, row := range resp.Values {
-
-			curRowData := make(map[string]string)
-			curRowData["Ссылка"] = ""
-
-			for colIdx, cell := range row {
-				if rowIdx > 0 && colIdx >= len(fieldnamesSlice) {
-					break
-				}
-
-				cellStr, ok := cell.(string)
-				if !ok {
-					fmt.Println(`Type assertion failed. The interface does
-									not contain a string.`)
-					continue
-				}
-
-				if rowIdx == 0 {
-					if !linkColumnExists && cellStr == "Ссылка" {
-						linkColumnExists = true
-					}
-					fieldnamesSlice = append(fieldnamesSlice, cellStr)
-					continue
-				}
-
-				if !linkColumnExists && colIdx == 0 {
-					curRowData["Ссылка"] = cellStr
-				} else {
-					curRowData[fieldnamesSlice[colIdx]] = cellStr
-				}
-			}
-
-			delete(prevRowData, "Сумма")
-
-			if len(curRowData) <= 2 {
-				continue
-			} else if curRowData["Ссылка"] == "" {
-				for k, v := range curRowData {
-					if v != "" {
-						prevRowData[k] = v
-					}
-				}
-			} else {
-				prevRowData = curRowData
-			}
-
-			NewDataInstance := &db.Data{
-				Date:      date,
-				RowNumber: rowIdx + 1,
-			}
-
-			if err := PopulateDataStructFromMap(NewDataInstance, prevRowData); err != nil {
-				tx.Rollback()
-				utils.HandleError(err, "error converting map to Data struct")
-			}
-
-			dataToBeStored = append(dataToBeStored, NewDataInstance)
+		if err = handler.processSheet(tx, sheet, sheetHash, date, resp.Values); err != nil {
+			return fmt.Errorf("failed to process sheet: %w", err)
 		}
-
-		if err = handler.storage.BulkInsertDataWithTx(tx, dataToBeStored); err != nil {
-			tx.Rollback()
-			return err
-		}
-
-		if err = tx.Commit(); err != nil {
+		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("failed to commit transaction: %w", err)
 		}
-		fmt.Printf("Successsfuly stored data for %v\n", date)
+		if err := handler.essentialsHandler.UpdateEssentialsByDate(date); err != nil {
+			return err
+		}
+		log.Printf("Successsfuly stored data for %v\n", date)
 	}
-
 	return nil
 }
 
-func GenerateHash(data [][]interface{}) string {
+func (handler *SheetsHandler) processSheet(
+	tx *sql.Tx, sheet *sheets.Sheet, sheetHash, date string, values [][]interface{}) error {
+
+	handler.storage.DeleteDataByDateWithTx(tx, date)
+	handler.storage.UpdateHashWithTx(tx, date, sheetHash)
+	dataToBeStored := []*db.Data{}
+	fieldnamesSlice := []string{}
+	linkColumnExists := false
+
+	for rowIdx, row := range values {
+		curRowData := processRow(rowIdx, row, &fieldnamesSlice, &linkColumnExists)
+		mergedCells := getMergedCells(sheet)
+
+		if _, exists := mergedCells[rowIdx]; !exists && curRowData["Ссылка"] == "" {
+			if curRowData["Сумма"] != "" {
+				log.Printf("Link is missing in an entry with not-null sum: %v, line %v\n",
+					date, rowIdx+1)
+			} else {
+				continue
+			}
+		}
+
+		NewDataInstance := &db.Data{
+			Date:      date,
+			RowNumber: rowIdx + 1,
+		}
+
+		if err := PopulateDataStructFromMap(NewDataInstance, curRowData); err != nil {
+			return fmt.Errorf(
+				"failed to convert map to Data struct: date %s, rowIdx: %v: %w",
+				date, rowIdx, err,
+			)
+		}
+		dataToBeStored = append(dataToBeStored, NewDataInstance)
+	}
+
+	if err := handler.storage.BulkInsertDataWithTx(tx, dataToBeStored); err != nil {
+		return fmt.Errorf("failed to perform bulk insert: %w", err)
+	}
+	return nil
+}
+
+func processRow(
+	rowIdx int, row []interface{}, fieldnamesSlice *[]string, linkColumnExists *bool,
+) map[string]string {
+
+	curRowData := make(map[string]string)
+	curRowData["Ссылка"] = ""
+
+	for colIdx, cell := range row {
+		if rowIdx > 0 && colIdx >= len(*fieldnamesSlice) {
+			break
+		}
+
+		cellStr, ok := cell.(string)
+		if !ok {
+			log.Println(`Type assertion failed. The interface does
+							not contain a string.`)
+			continue
+		}
+
+		if rowIdx == 0 {
+			if cellStr == "Ссылка" {
+				*linkColumnExists = true
+			}
+			*fieldnamesSlice = append(*fieldnamesSlice, cellStr)
+			continue
+		}
+
+		if !*linkColumnExists && colIdx == 0 {
+			curRowData["Ссылка"] = cellStr
+		} else if cellStr != "" {
+			// TODO: this is the best place to convert values to lowercase if needed
+			curRowData[(*fieldnamesSlice)[colIdx]] = cellStr
+		}
+	}
+	return curRowData
+}
+
+func getMergedCells(sheet *sheets.Sheet) map[int]bool {
+	mergedCells := make(map[int]bool)
+	for _, mergeRange := range sheet.Merges {
+		if mergeRange.StartColumnIndex > 1 {
+			continue
+		}
+		for row := mergeRange.StartRowIndex + 1; row < mergeRange.EndRowIndex; row++ {
+			mergedCells[int(row)] = true
+		}
+	}
+	return mergedCells
+}
+
+func GenerateHash(data [][]interface{}) (string, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		utils.HandleError(err, "Error serializing sheet data")
+		return "", fmt.Errorf("failed to marshal sheet data: %w", err)
 	}
 
 	hash := sha256.New()
 	hash.Write([]byte(jsonData))
-	return hex.EncodeToString(hash.Sum(nil))
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func SerializeDate(sheetName, year string) string {
 	parts := strings.Split(sheetName, ".")
-
 	day := fmt.Sprintf("%02s", parts[0])
 	month := fmt.Sprintf("%02s", parts[1])
-
 	date := year + "." + month + "." + day
-
 	return date
 }
 
 func PopulateDataStructFromMap(data *db.Data, values map[string]string) error {
-
 	v := reflect.ValueOf(data).Elem()
 	t := v.Type()
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		fieldValue := v.Field(i)
-
 		tag := field.Tag.Get("fieldname")
-
 		value, exists := values[tag]
-
 		if !exists || !fieldValue.CanSet() {
 			continue
 		}

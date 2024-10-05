@@ -3,11 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"time"
 
+	"github.com/crush-on-anechka/ktn_stats/config"
+	"github.com/crush-on-anechka/ktn_stats/messagesender"
 	"github.com/crush-on-anechka/ktn_stats/tasks"
-	"github.com/crush-on-anechka/ktn_stats/utils"
 )
+
+// весь капс
+// все символы, если есть не кириллица
 
 func main() {
 	InitDBFlag := flag.Bool("init_db", false, "Initialize database")
@@ -19,42 +25,80 @@ func main() {
 	StoreAllFlag := flag.Bool(
 		"store_all",
 		false,
-		"Fetches and stores data from all spreadsheets",
+		"Fetch and store data from all spreadsheets",
 	)
 	StoreLatestFlag := flag.Bool(
 		"store_latest",
 		false,
-		"Fetches and stores data from most recent spreadsheet",
+		"Fetch and store data from most recent spreadsheet",
+	)
+	UpdateEssentialsFlag := flag.Bool(
+		"update_essentials",
+		false,
+		"Force re-process inscriptions and update essentials",
 	)
 
 	flag.Parse()
 
-	if *InitDBFlag {
-		tasks.InitDB()
-	} else if *CheckFieldnamesFlag {
+	botToken := config.Envs.TelegramToken
+	chatID := int64(config.Envs.TelegramChatID)
+	sender, err := messagesender.New(botToken, chatID)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	switch {
+	case *InitDBFlag:
+		err := tasks.InitDB()
+		handleError(err, sender, "Failed to initialize database")
+		handleSuccess(sender, "Database was successfully initialized")
+
+	case *CheckFieldnamesFlag:
 		err := tasks.CheckFieldnames()
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println("Fieldnames check: OK")
-		}
-	} else if *StoreAllFlag {
+		handleError(err, sender, "Failed to check fieldnames")
+		handleSuccess(sender, "Fieldnames check: OK")
+
+	case *StoreAllFlag:
 		err := tasks.StoreAllSpreadsheets()
-		if err != nil {
-			utils.HandleError(err, "failed to store spreadsheets data")
-		} else {
-			fmt.Println("Spreadsheets data were successfully stored")
-		}
-	} else if *StoreLatestFlag {
+		handleError(err, sender, "Failed to store spreadsheets data")
+		handleSuccess(sender, "Spreadsheets data was successfully stored")
+
+	case *StoreLatestFlag:
 		err := tasks.StoreLatestSpreadsheet()
-		if err != nil {
-			utils.HandleError(err, "failed to store latest spreadsheet data")
-		} else {
-			fmt.Println("Latest spreadsheet data was successfully stored")
-		}
-	} else {
+		handleError(err, sender, "Failed to store latest spreadsheet data")
+		handleSuccess(sender, "Latest spreadsheet data was successfully stored")
+
+	case *UpdateEssentialsFlag:
+		err := tasks.UpdateEssentials()
+		handleError(err, sender, "Failed to update essentials")
+		handleSuccess(sender, "Essential words and phrases were successfully updated")
+
+	default:
 		fmt.Println("No task specified. Available flags:")
 		flag.PrintDefaults()
 		os.Exit(1)
+	}
+}
+
+func handleError(err error, sender *messagesender.Sender, message string) {
+	if err != nil {
+		errSender := sender.SendMessageToTelegramBot(message)
+		if errSender != nil {
+			log.Println("Failed to send message to Telegram:", errSender)
+		}
+		log.Fatal(err)
+	}
+}
+
+func handleSuccess(sender *messagesender.Sender, message string) {
+	log.Println(message)
+
+	today := time.Now().Weekday()
+	if today == time.Monday {
+		message = "Monday check!\n" + message
+		errSender := sender.SendMessageToTelegramBot(message)
+		if errSender != nil {
+			log.Println("Failed to send message to Telegram:", errSender)
+		}
 	}
 }

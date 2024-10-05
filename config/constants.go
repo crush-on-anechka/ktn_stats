@@ -7,22 +7,26 @@ import (
 )
 
 const (
-	CredentialsFile      = "guitars-and-gear-ba6d7e015c91.json"
 	GreedyRequestTimeout = 50 * time.Millisecond
 	SafeRequestTimeout   = 1200 * time.Millisecond
 	StartYear            = 2018
+	SheetParseRange      = "A1:AA700"
+	SQLitePath           = "./ktn.db"
+)
+
+var (
+	ExcludeFields = []string{"да"}
 )
 
 const (
-	SheetsErrorMsg = "failed to create Sheets service"
+	DataTableName         = "Data"
+	DatesTableName        = "Dates"
+	SheetNameAvailability = "НАЛИЧИЕ"
+	SheetNameUrgentOrders = "Срочные заказы"
 )
 
 var (
-	ErrCurYearSpreadsheet = errors.New("failed to get current year spreadsheet")
-	ErrNoRecordFound      = errors.New("no record found")
-)
-
-var (
-	DatePatternRegex = regexp.MustCompile(`\b(\d{1,2})\.(\d{1,2})\b`)
-	ExcludeFields    = []string{"да"}
+	ErrNoRecordFound       = errors.New("no record found")
+	DatePatternRegex       = regexp.MustCompile(`\b(\d{1,2})\.(\d{1,2})\b`)
+	LowercaseCyrillicRegex = regexp.MustCompile(`[а-я]`)
 )

@@ -3,14 +3,19 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
+	CredentialsFile string
 	SheetParseRange string
 	SpreadsheetIDs  []string
+	SQLitePath      string
+	TelegramToken   string
+	TelegramChatID  int
 }
 
 var Envs = NewConfig()
@@ -21,8 +26,12 @@ func NewConfig() Config {
 	}
 
 	config := Config{
-		SheetParseRange: getEnv("SheetParseRange", "A1:AA500"),
+		CredentialsFile: getEnv("credentialsFile", ""),
+		SheetParseRange: getEnv("sheetParseRange", SheetParseRange),
 		SpreadsheetIDs:  getEnvAsSlice("spreadsheetIDString", ""),
+		SQLitePath:      getEnv("SQLitePath", SQLitePath),
+		TelegramToken:   getEnv("telegramToken", ""),
+		TelegramChatID:  getEnvAsInt("telegramChatID", 0),
 	}
 
 	return config
@@ -42,14 +51,14 @@ func getEnvAsSlice(key, defaultValue string) []string {
 	return valueAsSlice
 }
 
-// func getEnvAsInt(key string, defaultValue int) int {
-// 	value, exists := os.LookupEnv(key)
-// 	if !exists {
-// 		return defaultValue
-// 	}
-// 	valueAsInt, err := strconv.Atoi(value)
-// 	if err != nil {
-// 		return defaultValue
-// 	}
-// 	return valueAsInt
-// }
+func getEnvAsInt(key string, defaultValue int) int {
+	value, exists := os.LookupEnv(key)
+	if !exists {
+		return defaultValue
+	}
+	valueAsInt, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return valueAsInt
+}

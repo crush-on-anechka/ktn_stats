@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/crush-on-anechka/ktn_stats/config"
-	"github.com/crush-on-anechka/ktn_stats/utils"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -16,29 +15,31 @@ type SqliteDB struct {
 }
 
 func NewSqliteDB() (*SqliteDB, error) {
-	db, err := sql.Open("sqlite3", "./ktn.db")
+	db, err := sql.Open("sqlite3", config.Envs.SQLitePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to establish connection with database: %w", err)
 	}
 	sqliteDb := &SqliteDB{DB: db}
 	return sqliteDb, nil
 }
 
 func (sqlite *SqliteDB) Init() error {
-	createHashesTableSQL := `
-		CREATE TABLE IF NOT EXISTS Hashes (
+	createDatesTableSQL := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s (
 			Date TEXT PRIMARY KEY,
-			Hash TEXT
+			Hash TEXT,
+			Words JSON,
+			Phrases JSON
 		);
-	`
+	`, config.DatesTableName)
 
-	_, err := sqlite.DB.Exec(createHashesTableSQL)
+	_, err := sqlite.DB.Exec(createDatesTableSQL)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create table %s: %w", config.DatesTableName, err)
 	}
 
 	t := reflect.TypeOf(Data{})
-	createTableSQL := "CREATE TABLE IF NOT EXISTS Data ("
+	createTableSQL := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", config.DataTableName)
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
@@ -69,30 +70,28 @@ func (sqlite *SqliteDB) Init() error {
 	}
 
 	createTableSQL += ")"
-
-	createTableSQL += ", FOREIGN KEY (Date) REFERENCES Hashes(Date)"
-
+	createTableSQL += fmt.Sprintf(", FOREIGN KEY (Date) REFERENCES %s(Date)", config.DatesTableName)
 	createTableSQL += ");"
 
 	_, err = sqlite.DB.Exec(createTableSQL)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create table %s: %w", config.DataTableName, err)
 	}
 
 	return nil
 }
 
-func (sqlite *SqliteDB) BeginTransaction() *sql.Tx {
+func (sqlite *SqliteDB) BeginTransaction() (*sql.Tx, error) {
 	tx, err := sqlite.DB.Begin()
 	if err != nil {
-		utils.HandleError(err, "failed to begin transaction")
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	return tx
+	return tx, nil
 }
 
 func (sqlite *SqliteDB) GetHash(date string) (string, error) {
 	var hash string
-	query := `SELECT Hash FROM Hashes WHERE Date = ? LIMIT 1;`
+	query := fmt.Sprintf("SELECT Hash FROM %s WHERE Date = ? LIMIT 1;", config.DatesTableName)
 
 	err := sqlite.DB.QueryRow(query, date).Scan(&hash)
 	if err != nil {
@@ -105,71 +104,79 @@ func (sqlite *SqliteDB) GetHash(date string) (string, error) {
 	return hash, nil
 }
 
-func (sqlite *SqliteDB) CreateHash(date, hash string) {
-	insertSQL := `INSERT INTO Hashes (Date, Hash) VALUES (?, ?)`
+func (sqlite *SqliteDB) CreateHash(date, hash string) error {
+	insertSQL := fmt.Sprintf("INSERT INTO %s (Date, Hash) VALUES (?, ?)", config.DatesTableName)
 
 	statement, err := sqlite.DB.Prepare(insertSQL)
 	if err != nil {
-		utils.HandleError(err, "failed to prepare SQL statement")
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer statement.Close()
 
 	_, err = statement.Exec(date, hash)
 	if err != nil {
-		utils.HandleError(err, "failed to insert data")
+		return fmt.Errorf("failed to insert data: %w", err)
 	}
+
+	return nil
 }
 
-func (sqlite *SqliteDB) CreateHashWithTx(tx *sql.Tx, date, hash string) {
-	insertSQL := `INSERT INTO Hashes (Date, Hash) VALUES (?, ?)`
+func (sqlite *SqliteDB) CreateHashWithTx(tx *sql.Tx, date, hash string) error {
+	insertSQL := fmt.Sprintf("INSERT INTO %s (Date, Hash) VALUES (?, ?)", config.DatesTableName)
 
 	statement, err := tx.Prepare(insertSQL)
 	if err != nil {
-		utils.HandleError(err, "failed to prepare SQL statement")
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer statement.Close()
 
 	_, err = statement.Exec(date, hash)
 	if err != nil {
-		utils.HandleError(err, "failed to insert data")
+		return fmt.Errorf("failed to insert data: %w", err)
 	}
+
+	return nil
 }
 
-func (sqlite *SqliteDB) UpdateHash(date, newHash string) {
-	updateSQL := `UPDATE Hashes SET Hash = ? WHERE Date = ?`
+func (sqlite *SqliteDB) UpdateHash(date, newHash string) error {
+	updateSQL := fmt.Sprintf("UPDATE %s SET Hash = ? WHERE Date = ?", config.DatesTableName)
 
 	statement, err := sqlite.DB.Prepare(updateSQL)
 	if err != nil {
-		utils.HandleError(err, "failed to prepare SQL statement")
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer statement.Close()
 
 	_, err = statement.Exec(newHash, date)
 	if err != nil {
-		utils.HandleError(err, "failed to update data")
+		return fmt.Errorf("failed to update data: %w", err)
 	}
+
+	return nil
 }
 
-func (sqlite *SqliteDB) UpdateHashWithTx(tx *sql.Tx, date, newHash string) {
-	updateSQL := `UPDATE Hashes SET Hash = ? WHERE Date = ?`
+func (sqlite *SqliteDB) UpdateHashWithTx(tx *sql.Tx, date, newHash string) error {
+	updateSQL := fmt.Sprintf("UPDATE %s SET Hash = ? WHERE Date = ?", config.DatesTableName)
 
 	statement, err := tx.Prepare(updateSQL)
 	if err != nil {
-		utils.HandleError(err, "failed to prepare SQL statement")
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer statement.Close()
 
 	_, err = statement.Exec(newHash, date)
 	if err != nil {
-		utils.HandleError(err, "failed to update data")
+		return fmt.Errorf("failed to update data: %w", err)
 	}
+
+	return nil
 }
 
 // BulkInsertData receives a slice of structs (Data instances) and writes them to db
 func (sqlite *SqliteDB) BulkInsertData(records interface{}) error {
 	recordsValue := reflect.ValueOf(records)
 	if recordsValue.Kind() != reflect.Slice {
-		return fmt.Errorf("records should be a slice")
+		return fmt.Errorf("expected a slice but got %T", reflect.TypeOf(records))
 	}
 
 	if recordsValue.Len() == 0 {
@@ -187,20 +194,21 @@ func (sqlite *SqliteDB) BulkInsertData(records interface{}) error {
 	}
 
 	sqlStatement := fmt.Sprintf(
-		"INSERT INTO Data (%s) VALUES (%s)",
+		"INSERT INTO %s (%s) VALUES (%s)",
+		config.DataTableName,
 		strings.Join(fields, ","),
 		strings.Join(placeholders, ","),
 	)
 
 	tx, err := sqlite.DB.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	stmt, err := tx.Prepare(sqlStatement)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer stmt.Close()
 
@@ -213,7 +221,7 @@ func (sqlite *SqliteDB) BulkInsertData(records interface{}) error {
 		_, err = stmt.Exec(values...)
 		if err != nil {
 			tx.Rollback()
-			return err
+			return fmt.Errorf("failed to execute SQL statement: %w", err)
 		}
 	}
 
@@ -224,7 +232,7 @@ func (sqlite *SqliteDB) BulkInsertData(records interface{}) error {
 func (sqlite *SqliteDB) BulkInsertDataWithTx(tx *sql.Tx, records interface{}) error {
 	recordsValue := reflect.ValueOf(records)
 	if recordsValue.Kind() != reflect.Slice {
-		return fmt.Errorf("records should be a slice")
+		return fmt.Errorf("expected a slice but got %T", reflect.TypeOf(records))
 	}
 
 	if recordsValue.Len() == 0 {
@@ -242,14 +250,15 @@ func (sqlite *SqliteDB) BulkInsertDataWithTx(tx *sql.Tx, records interface{}) er
 	}
 
 	sqlStatement := fmt.Sprintf(
-		"INSERT INTO Data (%s) VALUES (%s)",
+		"INSERT INTO %s (%s) VALUES (%s)",
+		config.DataTableName,
 		strings.Join(fields, ","),
 		strings.Join(placeholders, ","),
 	)
 
 	stmt, err := tx.Prepare(sqlStatement)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer stmt.Close()
 
@@ -261,39 +270,150 @@ func (sqlite *SqliteDB) BulkInsertDataWithTx(tx *sql.Tx, records interface{}) er
 		}
 		_, err = stmt.Exec(values...)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute SQL statement: %w", err)
 		}
 	}
 
 	return nil
 }
 
-func (sqlite *SqliteDB) DeleteDataByDate(date string) {
-	deleteSQL := `DELETE FROM Data WHERE Date = ?;`
+func (sqlite *SqliteDB) DeleteDataByDate(date string) error {
+	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE Date = ?;", config.DataTableName)
 
 	stmt, err := sqlite.DB.Prepare(deleteSQL)
 	if err != nil {
-		utils.HandleError(err, "failed to prepare SQL statement")
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(date)
 	if err != nil {
-		utils.HandleError(err, "failed to delete data")
+		return fmt.Errorf("failed to execute SQL statement: %w", err)
 	}
+
+	return nil
 }
 
-func (sqlite *SqliteDB) DeleteDataByDateWithTx(tx *sql.Tx, date string) {
-	deleteSQL := `DELETE FROM Data WHERE Date = ?;`
+func (sqlite *SqliteDB) DeleteDataByDateWithTx(tx *sql.Tx, date string) error {
+	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE Date = ?;", config.DataTableName)
 
 	stmt, err := tx.Prepare(deleteSQL)
 	if err != nil {
-		utils.HandleError(err, "failed to prepare SQL statement")
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(date)
 	if err != nil {
-		utils.HandleError(err, "failed to delete data")
+		return fmt.Errorf("failed to execute SQL statement: %w", err)
 	}
+
+	return nil
+}
+
+// GetEssentialValues fetches values from all relevant fields containing inscriptions
+func (sqlite *SqliteDB) GetInscriptionsByDate(date string) ([]string, error) {
+	// TODO: refactor when all types and subtypes will be stored in DB as lowercase
+	query := fmt.Sprintf(
+		`SELECT Inscription, EdgeLower, EdgeUpper, Pendant, Ring, InscriptionBracelet
+		FROM %s
+		WHERE Date = ?
+		AND Type NOT IN (
+			'Кольцо с камнем', 'Кольцо-символ', 'Подвеска с камнем', 'Серьги с камнями', 'Серьги',
+			'Символ-браслет', 'Символ-подвеска', 'Шнурок', 'Цепочка', 'Шнурок для адресника'
+		)
+		AND SubType NOT LIKE 'капелька%%'
+		AND SubType NOT LIKE '%%апки%%'
+		AND SubType NOT LIKE '%%ракон%%'
+		AND SubType NOT LIKE '%%убики%%'
+		AND SubType NOT LIKE '%%апсула%%'
+		AND SubType NOT LIKE 'писюн%%'
+		AND SubType NOT LIKE 'член%%'
+		AND SubType NOT LIKE '%%нгел%%'
+		;`,
+		config.DataTableName,
+	)
+
+	rows, err := sqlite.DB.Query(query, date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allInscriptions []string
+
+	for rows.Next() {
+		values := make([]string, 6)
+		err = rows.Scan(
+			&values[0], &values[1], &values[2], &values[3], &values[4], &values[5])
+		if err != nil {
+			return nil, err
+		}
+
+		for _, value := range values {
+			if value != "" {
+				allInscriptions = append(allInscriptions, value)
+			}
+		}
+	}
+
+	return allInscriptions, nil
+}
+
+func (sqlite *SqliteDB) UpdateWords(date, essentials string) error {
+	updateSQL := fmt.Sprintf("UPDATE %s SET Words = ? WHERE Date = ?", config.DatesTableName)
+
+	statement, err := sqlite.DB.Prepare(updateSQL)
+	if err != nil {
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
+	}
+	defer statement.Close()
+
+	_, err = statement.Exec(essentials, date)
+	if err != nil {
+		return fmt.Errorf("failed to update data: %w", err)
+	}
+
+	return nil
+}
+
+func (sqlite *SqliteDB) UpdateWordsWithTx(tx *sql.Tx, date, essentials string) error {
+	updateSQL := fmt.Sprintf("UPDATE %s SET Words = ? WHERE Date = ?", config.DatesTableName)
+
+	statement, err := tx.Prepare(updateSQL)
+	if err != nil {
+		return fmt.Errorf("failed to prepare SQL statement: %w", err)
+	}
+	defer statement.Close()
+
+	_, err = statement.Exec(essentials, date)
+	if err != nil {
+		return fmt.Errorf("failed to update data: %w", err)
+	}
+
+	return nil
+}
+
+func (sqlite *SqliteDB) GetDates() ([]string, error) {
+	query := fmt.Sprintf("SELECT Date FROM %s;", config.DatesTableName)
+
+	rows, err := sqlite.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dates []string
+
+	for rows.Next() {
+		var date string
+		err = rows.Scan(&date)
+		if err != nil {
+			return nil, err
+		}
+
+		dates = append(dates, date)
+	}
+
+	return dates, nil
 }

@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -10,7 +9,6 @@ import (
 	"github.com/crush-on-anechka/ktn_stats/config"
 	"github.com/crush-on-anechka/ktn_stats/db"
 	"github.com/crush-on-anechka/ktn_stats/sheetsclient"
-	"github.com/crush-on-anechka/ktn_stats/utils"
 )
 
 // CheckFieldnames parses fieldnames from most recent spreadsheet and checks if they all are
@@ -18,36 +16,37 @@ import (
 func CheckFieldnames() error {
 	client, err := sheetsclient.New(config.GreedyRequestTimeout)
 	if err != nil {
-		utils.HandleError(err, config.SheetsErrorMsg)
+		return fmt.Errorf("failed to create Sheets client: %w", err)
 	}
 
 	currentYear := time.Now().Year()
 	yearAsStr := strconv.Itoa(currentYear)
 
-	currentSpreadsheet := client.GetSpreadsheetByYear(yearAsStr)
-
-	if currentSpreadsheet == nil {
-		return config.ErrCurYearSpreadsheet
+	currentSpreadsheet, err := client.GetSpreadsheetByYear(yearAsStr)
+	if err != nil {
+		return fmt.Errorf("failed to get spreadsheet by year %s: %w", yearAsStr, err)
 	}
 
-	fieldnamesFromSheets := client.GetFieldnamesFromSpreadsheet(currentSpreadsheet)
+	fieldnamesFromSheets, err := client.GetFieldnamesFromSpreadsheet(currentSpreadsheet)
+	if err != nil {
+		return fmt.Errorf("failed to get spreadsheet fieldnames: %w", err)
+	}
 
 	for _, field := range config.ExcludeFields {
 		delete(fieldnamesFromSheets, field)
 	}
 
-	if !areFieldnamesPresentInModel(fieldnamesFromSheets) {
-		return errors.New("spreadsheet contains new fields which are not present in database")
+	if err := fieldnamesPresentInModelCheck(fieldnamesFromSheets); err != nil {
+		return fmt.Errorf("spreadsheet %s contains fields which are not present in database: %w",
+			currentSpreadsheet.Properties.Title, err)
 	}
-
 	return nil
 }
 
-// areFieldnamesPresentInModel checks if all fieldnames from given map exist in db.Data struct
-func areFieldnamesPresentInModel(fieldnamesFromSheets map[string]bool) bool {
+// fieldnamesPresentInModelCheck checks if all fieldnames from given map exist in db.Data struct
+func fieldnamesPresentInModelCheck(fieldnamesFromSheets map[string]bool) error {
 	val := reflect.ValueOf(db.Data{})
 	typ := val.Type()
-
 	fieldnamesFromModel := make(map[string]bool)
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -57,10 +56,8 @@ func areFieldnamesPresentInModel(fieldnamesFromSheets map[string]bool) bool {
 
 	for key := range fieldnamesFromSheets {
 		if !fieldnamesFromModel[key] {
-			fmt.Printf("missing key: %s\n", key)
-			return false
+			return fmt.Errorf("key %s is not found in Data model", key)
 		}
 	}
-
-	return true
+	return nil
 }

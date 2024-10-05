@@ -22,10 +22,11 @@ type SheetsClient struct {
 
 func New(requestTimeout time.Duration) (*SheetsClient, error) {
 	ctx := context.Background()
-	srv, err := sheets.NewService(ctx, option.WithCredentialsFile(config.CredentialsFile))
+	srv, err := sheets.NewService(ctx, option.WithCredentialsFile(config.Envs.CredentialsFile))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create Sheets service: %w", err)
 	}
+
 	sheetsClient := &SheetsClient{
 		Service:        srv,
 		spreadsheetIDs: config.Envs.SpreadsheetIDs,
@@ -37,69 +38,52 @@ func New(requestTimeout time.Duration) (*SheetsClient, error) {
 func (client *SheetsClient) GetSpreadsheetByID(spreadsheetID string) (*sheets.Spreadsheet, error) {
 	spreadsheet, err := client.Service.Spreadsheets.Get(spreadsheetID).Do()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get spreadsheet: %w", err)
 	}
 	return spreadsheet, nil
 }
 
-func (client *SheetsClient) GetSpreadsheetByYear(year string) *sheets.Spreadsheet {
+func (client *SheetsClient) GetSpreadsheetByYear(year string) (*sheets.Spreadsheet, error) {
 	for _, spreadsheetID := range client.spreadsheetIDs {
 		spreadsheet, err := client.Service.Spreadsheets.Get(spreadsheetID).Do()
 		if err != nil {
-			return nil
+			return nil, fmt.Errorf("failed to get spreadsheet: %w", err)
 		}
 
 		spreadsheetYear := ExtractYearFromTitle(spreadsheet.Properties.Title)
-
 		if spreadsheetYear == year {
-			return spreadsheet
+			return spreadsheet, nil
 		}
 	}
-	return nil
-}
-
-func (client *SheetsClient) GetSpreadsheets() ([]*sheets.Spreadsheet, error) {
-	spreadsheets := []*sheets.Spreadsheet{}
-
-	for _, spreadsheetID := range client.spreadsheetIDs {
-		spreadsheet, err := client.Service.Spreadsheets.Get(spreadsheetID).Do()
-		if err != nil {
-			return nil, err
-		}
-		spreadsheets = append(spreadsheets, spreadsheet)
-	}
-
-	return spreadsheets, nil
+	return nil, config.ErrNoRecordFound
 }
 
 // getFieldnamesFromSpreadsheet parses all existing column (field) names from every sheet
 // in a specified spreadsheet
 func (client *SheetsClient) GetFieldnamesFromSpreadsheet(
-	spreadsheet *sheets.Spreadsheet) map[string]bool {
-
+	spreadsheet *sheets.Spreadsheet) (map[string]bool, error) {
 	fieldnames := make(map[string]bool)
 
 	for _, sheet := range spreadsheet.Sheets {
 		time.Sleep(client.RequestTimeout)
 		sheetName := sheet.Properties.Title
-
-		if !config.DatePatternRegex.MatchString(sheetName) {
+		if !config.DatePatternRegex.MatchString(sheetName) &&
+			sheetName != "НАЛИЧИЕ" && sheetName != "Срочные заказы" {
 			continue
 		}
 
 		readRange := fmt.Sprintf("%s!%s", sheetName, config.Envs.SheetParseRange)
-
 		resp, err := client.Service.Spreadsheets.Values.Get(
 			spreadsheet.SpreadsheetId, readRange).Do()
 		if err != nil {
-			log.Fatalf("Unable to retrieve data from sheet: %v", err)
+			return nil, fmt.Errorf("failed to retrieve data from sheet %s: %w", sheetName, err)
 		}
 
 		for _, row := range resp.Values {
 			for _, cell := range row {
 				cellStr, ok := cell.(string)
 				if !ok {
-					fmt.Println("Type assertion failed. The interface does not contain a string.")
+					log.Println("Type assertion failed. The interface does not contain a string.")
 					continue
 				}
 
@@ -110,8 +94,7 @@ func (client *SheetsClient) GetFieldnamesFromSpreadsheet(
 			break
 		}
 	}
-
-	return fieldnames
+	return fieldnames, nil
 }
 
 func IsNumeric(value string) bool {
@@ -122,8 +105,6 @@ func IsNumeric(value string) bool {
 
 func ExtractYearFromTitle(input string) string {
 	re := regexp.MustCompile(`\b\d{4}\b`)
-
 	year := re.FindString(input)
-
 	return year
 }
