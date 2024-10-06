@@ -15,7 +15,15 @@ const (
 )
 
 var (
-	ExcludeFields = []string{"да"}
+	ExcludeFields         = []string{"да"}
+	FieldsWithInscription = map[string]bool{
+		"Inscription":         true,
+		"EdgeLower":           true,
+		"EdgeUpper":           true,
+		"Pendant":             true,
+		"Ring":                true,
+		"InscriptionBracelet": true,
+	}
 )
 
 const (

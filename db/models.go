@@ -5,6 +5,7 @@ var primaryKeys = []string{"Date", "RowNumber"}
 type Data struct {
 	Date      string
 	RowNumber int
+	Search    string
 
 	Payment             string `fieldname:"Оплата"`
 	PVZ                 string `fieldname:"Код ПВЗ"`

@@ -54,8 +54,8 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 	for _, sheet := range spreadsheet.Sheets {
 		time.Sleep(handler.client.RequestTimeout)
 		sheetName := sheet.Properties.Title
-
 		dateFromSheetName := config.DatePatternRegex.FindString(sheetName)
+
 		if sheetName == config.SheetNameAvailability {
 			dateFromSheetName = "00.00"
 		}
@@ -154,6 +154,8 @@ func (handler *SheetsHandler) processSheet(
 				date, rowIdx, err,
 			)
 		}
+
+		handleSearchField(NewDataInstance)
 		dataToBeStored = append(dataToBeStored, NewDataInstance)
 	}
 
@@ -193,7 +195,6 @@ func processRow(
 		if !*linkColumnExists && colIdx == 0 {
 			curRowData["Ссылка"] = cellStr
 		} else if cellStr != "" {
-			// TODO: this is the best place to convert values to lowercase if needed
 			curRowData[(*fieldnamesSlice)[colIdx]] = cellStr
 		}
 	}
@@ -267,4 +268,20 @@ func PopulateDataStructFromMap(data *db.Data, values map[string]string) error {
 		}
 	}
 	return nil
+}
+
+func handleSearchField(NewDataInstance *db.Data) {
+	v := reflect.ValueOf(NewDataInstance).Elem()
+	t := v.Type()
+	var searchFieldValue string
+
+	for i := 0; i < t.NumField(); i++ {
+		fieldName := t.Field(i).Name
+		if _, exists := config.FieldsWithInscription[fieldName]; exists {
+			fieldValue := v.Field(i)
+			searchFieldValue += strings.ToUpper(fieldValue.String()) + " "
+		}
+	}
+
+	NewDataInstance.Search = strings.TrimSpace(searchFieldValue)
 }
