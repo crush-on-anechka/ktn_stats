@@ -57,10 +57,10 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 		dateFromSheetName := config.DatePatternRegex.FindString(sheetName)
 
 		if sheetName == config.SheetNameAvailability {
-			dateFromSheetName = "00.00"
+			dateFromSheetName = config.SheetAvailabilityDate
 		}
 		if sheetName == config.SheetNameUrgentOrders {
-			dateFromSheetName = "01.00"
+			dateFromSheetName = config.SheetUrgentOrdersDate
 		}
 		if dateFromSheetName == "" {
 			continue
@@ -104,20 +104,26 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 				return fmt.Errorf("failed to retrieve hash for date %s: %w", date, err)
 			}
 		}
+
 		if sheetHash == storedHash {
 			continue
 		}
+
 		if err = handler.processSheet(tx, sheet, sheetHash, date, resp.Values); err != nil {
 			return fmt.Errorf("failed to process sheet: %w", err)
 		}
+
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("failed to commit transaction: %w", err)
 		}
+
 		if err := handler.essentialsHandler.UpdateEssentialsByDate(date); err != nil {
 			return err
 		}
+
 		log.Printf("Successsfuly stored data for %v\n", date)
 	}
+
 	return nil
 }
 
@@ -125,13 +131,16 @@ func (handler *SheetsHandler) processSheet(
 	tx *sql.Tx, sheet *sheets.Sheet, sheetHash, date string, values [][]interface{}) error {
 
 	handler.storage.DeleteDataByDateWithTx(tx, date)
+
 	handler.storage.UpdateHashWithTx(tx, date, sheetHash)
-	dataToBeStored := []*db.Data{}
+
 	fieldnamesSlice := []string{}
 	linkColumnExists := false
+	dataToBeStored := []*db.Data{}
 
 	for rowIdx, row := range values {
 		curRowData := processRow(rowIdx, row, &fieldnamesSlice, &linkColumnExists)
+
 		mergedCells := getMergedCells(sheet)
 
 		if _, exists := mergedCells[rowIdx]; !exists && curRowData["Ссылка"] == "" {
@@ -156,12 +165,14 @@ func (handler *SheetsHandler) processSheet(
 		}
 
 		handleSearchField(NewDataInstance)
+
 		dataToBeStored = append(dataToBeStored, NewDataInstance)
 	}
 
 	if err := handler.storage.BulkInsertDataWithTx(tx, dataToBeStored); err != nil {
 		return fmt.Errorf("failed to perform bulk insert: %w", err)
 	}
+
 	return nil
 }
 
@@ -198,11 +209,13 @@ func processRow(
 			curRowData[(*fieldnamesSlice)[colIdx]] = cellStr
 		}
 	}
+
 	return curRowData
 }
 
 func getMergedCells(sheet *sheets.Sheet) map[int]bool {
 	mergedCells := make(map[int]bool)
+
 	for _, mergeRange := range sheet.Merges {
 		if mergeRange.StartColumnIndex > 1 {
 			continue
@@ -211,6 +224,7 @@ func getMergedCells(sheet *sheets.Sheet) map[int]bool {
 			mergedCells[int(row)] = true
 		}
 	}
+
 	return mergedCells
 }
 
@@ -222,7 +236,9 @@ func GenerateHash(data [][]interface{}) (string, error) {
 
 	hash := sha256.New()
 	hash.Write([]byte(jsonData))
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	hashAsString := hex.EncodeToString(hash.Sum(nil))
+
+	return hashAsString, nil
 }
 
 func SerializeDate(sheetName, year string) string {

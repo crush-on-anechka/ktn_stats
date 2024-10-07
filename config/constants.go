@@ -34,6 +34,8 @@ const (
 	DatesTableName        = "Dates"
 	SheetNameAvailability = "НАЛИЧИЕ"
 	SheetNameUrgentOrders = "Срочные заказы"
+	SheetAvailabilityDate = "00.00"
+	SheetUrgentOrdersDate = "01.00"
 )
 
 var (

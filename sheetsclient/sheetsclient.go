@@ -32,6 +32,7 @@ func New(requestTimeout time.Duration) (*SheetsClient, error) {
 		spreadsheetIDs: config.Envs.SpreadsheetIDs,
 		RequestTimeout: requestTimeout,
 	}
+
 	return sheetsClient, nil
 }
 
@@ -55,6 +56,7 @@ func (client *SheetsClient) GetSpreadsheetByYear(year string) (*sheets.Spreadshe
 			return spreadsheet, nil
 		}
 	}
+
 	return nil, config.ErrNoRecordFound
 }
 

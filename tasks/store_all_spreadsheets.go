@@ -18,17 +18,20 @@ func StoreAllSpreadsheets() error {
 	defer storage.DB.Close()
 
 	essentialsHandler := essentialshandler.New(storage)
+
 	sheetsHandler, err := sheetshandler.New(storage, config.SafeRequestTimeout, essentialsHandler)
 	if err != nil {
 		return fmt.Errorf("failed to create sheetshandler: %w", err)
 	}
 
 	currentYear := time.Now().Year()
+
 	for year := config.StartYear; year <= currentYear; year++ {
 		err := sheetsHandler.StoreSpreadsheetByYear(year)
 		if err != nil {
 			return fmt.Errorf("failed to store %v spreadsheet: %w", currentYear, err)
 		}
 	}
+
 	return nil
 }

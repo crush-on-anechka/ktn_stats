@@ -1,5 +1,7 @@
 # ktn_stats
 
+Stores ktn google sheets data in a SQLite DB. Provides frequent updates and optimized search
+
 ## launch
 - go run cmd/main.go -store_latest
 - go run cmd/main.go -store_all

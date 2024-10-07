@@ -40,6 +40,7 @@ func CheckFieldnames() error {
 		return fmt.Errorf("spreadsheet %s contains fields which are not present in database: %w",
 			currentSpreadsheet.Properties.Title, err)
 	}
+
 	return nil
 }
 
@@ -48,6 +49,7 @@ func fieldnamesPresentInModelCheck(fieldnamesFromSheets map[string]bool) error {
 	val := reflect.ValueOf(db.Data{})
 	typ := val.Type()
 	fieldnamesFromModel := make(map[string]bool)
+
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		tagValue := field.Tag.Get("fieldname")
@@ -59,5 +61,6 @@ func fieldnamesPresentInModelCheck(fieldnamesFromSheets map[string]bool) error {
 			return fmt.Errorf("key %s is not found in Data model", key)
 		}
 	}
+
 	return nil
 }

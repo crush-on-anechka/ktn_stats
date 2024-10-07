@@ -178,15 +178,14 @@ func (sqlite *SqliteDB) BulkInsertData(records interface{}) error {
 	if recordsValue.Kind() != reflect.Slice {
 		return fmt.Errorf("expected a slice but got %T", reflect.TypeOf(records))
 	}
-
 	if recordsValue.Len() == 0 {
 		return nil
 	}
 
 	recordType := recordsValue.Index(0).Elem().Type()
-
 	fields := make([]string, 0, recordType.NumField())
 	placeholders := make([]string, 0, recordType.NumField())
+
 	for i := 0; i < recordType.NumField(); i++ {
 		field := recordType.Field(i)
 		fields = append(fields, field.Name)
@@ -234,15 +233,14 @@ func (sqlite *SqliteDB) BulkInsertDataWithTx(tx *sql.Tx, records interface{}) er
 	if recordsValue.Kind() != reflect.Slice {
 		return fmt.Errorf("expected a slice but got %T", reflect.TypeOf(records))
 	}
-
 	if recordsValue.Len() == 0 {
 		return nil
 	}
 
 	recordType := recordsValue.Index(0).Elem().Type()
-
 	fields := make([]string, 0, recordType.NumField())
 	placeholders := make([]string, 0, recordType.NumField())
+
 	for i := 0; i < recordType.NumField(); i++ {
 		field := recordType.Field(i)
 		fields = append(fields, field.Name)

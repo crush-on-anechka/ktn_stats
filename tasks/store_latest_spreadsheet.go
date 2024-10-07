@@ -18,11 +18,13 @@ func StoreLatestSpreadsheet() error {
 	defer storage.DB.Close()
 
 	essentialsHandler := essentialshandler.New(storage)
+
 	sheetsHandler, err := sheetshandler.New(storage, config.GreedyRequestTimeout, essentialsHandler)
 	if err != nil {
 		return fmt.Errorf("failed to create sheetshandler: %w", err)
 	}
 
 	currentYear := time.Now().Year()
+
 	return sheetsHandler.StoreSpreadsheetByYear(currentYear)
 }
