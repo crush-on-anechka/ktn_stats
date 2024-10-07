@@ -24,6 +24,9 @@ var (
 		"Ring":                true,
 		"InscriptionBracelet": true,
 	}
+	WeeklyCheckWeekday  = time.Monday
+	WeeklyCheckHourFrom = 9
+	WeeklyCheckHourTo   = 12
 )
 
 const (

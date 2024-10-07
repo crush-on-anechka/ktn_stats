@@ -5,15 +5,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/crush-on-anechka/ktn_stats/config"
 	"github.com/crush-on-anechka/ktn_stats/messagesender"
 	"github.com/crush-on-anechka/ktn_stats/tasks"
 )
-
-// весь капс
-// все символы, если есть не кириллица
 
 func main() {
 	InitDBFlag := flag.Bool("init_db", false, "Initialize database")
@@ -77,28 +73,5 @@ func main() {
 		fmt.Println("No task specified. Available flags:")
 		flag.PrintDefaults()
 		os.Exit(1)
-	}
-}
-
-func handleError(err error, sender *messagesender.Sender, message string) {
-	if err != nil {
-		errSender := sender.SendMessageToTelegramBot(message)
-		if errSender != nil {
-			log.Println("Failed to send message to Telegram:", errSender)
-		}
-		log.Fatal(err)
-	}
-}
-
-func handleSuccess(sender *messagesender.Sender, message string) {
-	log.Println(message)
-
-	today := time.Now().Weekday()
-	if today == time.Monday {
-		message = "Monday check!\n" + message
-		errSender := sender.SendMessageToTelegramBot(message)
-		if errSender != nil {
-			log.Println("Failed to send message to Telegram:", errSender)
-		}
 	}
 }
