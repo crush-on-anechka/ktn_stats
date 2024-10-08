@@ -6,6 +6,7 @@ type Data struct {
 	Date      string
 	RowNumber int
 	Search    string
+	IsMerged  bool
 
 	Payment             string `fieldname:"Оплата"`
 	PVZ                 string `fieldname:"Код ПВЗ"`

@@ -53,6 +53,7 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 
 	for _, sheet := range spreadsheet.Sheets {
 		time.Sleep(handler.client.RequestTimeout)
+
 		sheetName := sheet.Properties.Title
 		dateFromSheetName := config.DatePatternRegex.FindString(sheetName)
 
@@ -138,12 +139,15 @@ func (handler *SheetsHandler) processSheet(
 	linkColumnExists := false
 	dataToBeStored := []*db.Data{}
 
+	mergedCells := getMergedCells(sheet)
+
 	for rowIdx, row := range values {
 		curRowData := processRow(rowIdx, row, &fieldnamesSlice, &linkColumnExists)
 
-		mergedCells := getMergedCells(sheet)
-
-		if _, exists := mergedCells[rowIdx]; !exists && curRowData["Ссылка"] == "" {
+		_, merged := mergedCells[rowIdx]
+		if merged && len(dataToBeStored) > 0 {
+			curRowData["Ссылка"] = dataToBeStored[len(dataToBeStored)-1].Link
+		} else if curRowData["Ссылка"] == "" {
 			if curRowData["Сумма"] != "" {
 				log.Printf("Link is missing in an entry with not-null sum: %v, line %v\n",
 					date, rowIdx+1)
@@ -155,6 +159,7 @@ func (handler *SheetsHandler) processSheet(
 		NewDataInstance := &db.Data{
 			Date:      date,
 			RowNumber: rowIdx + 1,
+			IsMerged:  merged,
 		}
 
 		if err := PopulateDataStructFromMap(NewDataInstance, curRowData); err != nil {
@@ -277,6 +282,9 @@ func PopulateDataStructFromMap(data *db.Data, values map[string]string) error {
 			}
 
 		case reflect.String:
+			if field.Name == "Type" {
+				value = strings.ToUpper(value)
+			}
 			fieldValue.SetString(value)
 
 		default:
