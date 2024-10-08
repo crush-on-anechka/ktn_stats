@@ -12,29 +12,7 @@ import (
 )
 
 func main() {
-	InitDBFlag := flag.Bool("init_db", false, "Initialize database")
-	CheckFieldnamesFlag := flag.Bool(
-		"check_fields",
-		false,
-		"Check if all fieldnames from most recent spreadsheet are present in db",
-	)
-	StoreAllFlag := flag.Bool(
-		"store_all",
-		false,
-		"Fetch and store data from all spreadsheets",
-	)
-	StoreLatestFlag := flag.Bool(
-		"store_latest",
-		false,
-		"Fetch and store data from most recent spreadsheet",
-	)
-	UpdateEssentialsFlag := flag.Bool(
-		"update_essentials",
-		false,
-		"Force re-process inscriptions and update essentials",
-	)
-
-	flag.Parse()
+	taskMode, webMode, taskFlags := initFlags()
 
 	botToken := config.Envs.TelegramToken
 	chatID := int64(config.Envs.TelegramChatID)
@@ -43,28 +21,38 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if *webMode {
+		startServer(sender)
+	} else if *taskMode {
+		runTask(taskFlags, sender)
+	} else {
+		log.Println("No mode specified. Use --task or --web")
+	}
+}
+
+func runTask(taskFlags map[string]*bool, sender *messagesender.Sender) {
 	switch {
-	case *InitDBFlag:
+	case *taskFlags["init_db"]:
 		err := tasks.InitDB()
 		handleError(err, sender, "Failed to initialize database")
 		handleSuccess(sender, "Database was successfully initialized")
 
-	case *CheckFieldnamesFlag:
+	case *taskFlags["check_fieldnames"]:
 		err := tasks.CheckFieldnames()
 		handleError(err, sender, "Failed to check fieldnames")
 		handleSuccess(sender, "Fieldnames check: OK")
 
-	case *StoreAllFlag:
+	case *taskFlags["store_all"]:
 		err := tasks.StoreAllSpreadsheets()
 		handleError(err, sender, "Failed to store spreadsheets data")
 		handleSuccess(sender, "Spreadsheets data was successfully stored")
 
-	case *StoreLatestFlag:
+	case *taskFlags["store_latest"]:
 		err := tasks.StoreLatestSpreadsheet()
 		handleError(err, sender, "Failed to store latest spreadsheet data")
 		handleSuccess(sender, "Latest spreadsheet data was successfully stored")
 
-	case *UpdateEssentialsFlag:
+	case *taskFlags["update_essentials"]:
 		err := tasks.UpdateEssentials()
 		handleError(err, sender, "Failed to update essentials")
 		handleSuccess(sender, "Essential words and phrases were successfully updated")
@@ -75,3 +63,20 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+func startServer(sender *messagesender.Sender) {
+	// http.HandleFunc("/fetch", fetchDataFromDB)
+	// log.Println("Starting HTTP server on :8080")
+
+	// err := http.ListenAndServe(":8080", nil)
+	// handleError(err, sender, "Failed to start HTTP server")
+}
+
+// func fetchDataFromDB(w http.ResponseWriter, r *http.Request) {
+// 	name := r.URL.Query().Get("name")
+
+// 	// Write response
+// 	w.Header().Set("Content-Type", "application/json")
+// 	w.WriteHeader(http.StatusOK)
+// 	fmt.Fprintf(w, `{"message": "Hello, %s!"}`, name)
+// }
