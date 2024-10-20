@@ -84,9 +84,9 @@ func startServer(sender *messagesender.Sender) {
 		fetchDataFromDB(w, r, db)
 	})
 
-	handleSuccess(sender, "Starting HTTP server on :8080")
+	handleSuccess(sender, fmt.Sprintf("Starting HTTP server on :%v", config.Envs.APIPort))
 
-	err = http.ListenAndServe(":8080", r)
+	err = http.ListenAndServe(fmt.Sprintf(":%v", config.Envs.APIPort), r)
 	handleError(err, sender, "Failed to start HTTP server")
 }
 

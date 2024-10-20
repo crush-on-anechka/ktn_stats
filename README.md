@@ -2,8 +2,10 @@
 
 Stores ktn google sheets data in a SQLite DB. Provides frequent updates and optimized search
 
-## launch
+## run search server
 - go run ./cmd --web
+
+## run tasks
 - go run ./cmd --task -store_latest
 - go run ./cmd --task -store_all
 - go run ./cmd --task -init_db

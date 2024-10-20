@@ -16,6 +16,7 @@ type Config struct {
 	SQLitePath      string
 	TelegramToken   string
 	TelegramChatID  int
+	APIPort         int
 }
 
 var Envs = NewConfig()
@@ -32,6 +33,7 @@ func NewConfig() Config {
 		SQLitePath:      getEnv("SQLitePath", SQLitePath),
 		TelegramToken:   getEnv("telegramToken", ""),
 		TelegramChatID:  getEnvAsInt("telegramChatID", 0),
+		APIPort:         getEnvAsInt("APIPort", 8000),
 	}
 
 	return config
