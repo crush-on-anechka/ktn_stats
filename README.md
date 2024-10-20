@@ -29,6 +29,7 @@ Must contain:
 Optional:
 - SheetParseRange (default - "A1:AA700")
 - SQLitePath (default - "./ktn.db")
+- APIPort (default - 8000)
 
 ## DB
 - in case if "link" column is merged in Google sheet, field "IsMerged" becomes "true" for merged rows except for the first one, and only the "link" field is populated with the same value for all of the merged rows in DB. To count values from "link" it's necessary to exclude rows where "IsMerged" == "true" because those will be duplicates of the same order

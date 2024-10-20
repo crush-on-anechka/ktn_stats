@@ -95,6 +95,12 @@
         .left {
             text-align: left;
         }
+        .errorMessage {
+            margin-top: 20px;
+            display: none;
+            justify-content: center;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -127,6 +133,10 @@
                 <tbody></tbody>
             </table>
         
+            <div class="errorMessage">
+                <span id="errorMessage"></span>
+            </div>
+
             <div class="pagination">
                 <button id="prevPage"><<<</button>
                 <span id="pageInfo"></span>
@@ -174,12 +184,15 @@
             const resultsTable = document.getElementById('resultsTable');
             const tbody = resultsTable.querySelector('tbody');
             tbody.innerHTML = '';
+            document.querySelector('.pagination').style.display = 'none';
+            document.querySelector('.errorMessage').style.display = 'none';
+            resultsTable.style.display = 'none';
 
-            document.getElementById('pageInfo').textContent = `Страница ${currentPage}`;
-            document.getElementById('prevPage').disabled = currentPage === 1;
-            document.getElementById('nextPage').disabled = results.length < limit;
-
-            if (results.length > 0) {
+            if (results) {
+                document.getElementById('pageInfo').textContent = `Страница ${currentPage}`;
+                document.getElementById('prevPage').disabled = currentPage === 1;
+                document.getElementById('nextPage').disabled = results.length < limit;
+                
                 results.forEach(result => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
@@ -196,8 +209,8 @@
                 resultsTable.style.display = 'table';
                 document.querySelector('.pagination').style.display = 'flex';
             } else {
-                resultsTable.style.display = 'none';
-                document.querySelector('.pagination').style.display = 'none';
+                document.querySelector('.errorMessage').style.display = 'flex';
+                document.getElementById('errorMessage').textContent = `ничего не найдено:(`;
             }
         };
     </script>
