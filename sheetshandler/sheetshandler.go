@@ -110,7 +110,8 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 			continue
 		}
 
-		if err = handler.processSheet(tx, sheet, sheetHash, date, resp.Values); err != nil {
+		if err = handler.processSheet(
+			tx, sheet, sheetHash, date, spreadsheet.SpreadsheetId, resp.Values); err != nil {
 			return fmt.Errorf("failed to process sheet: %w", err)
 		}
 
@@ -129,7 +130,8 @@ func (handler *SheetsHandler) StoreSpreadsheetByYear(inputYear int) error {
 }
 
 func (handler *SheetsHandler) processSheet(
-	tx *sql.Tx, sheet *sheets.Sheet, sheetHash, date string, values [][]interface{}) error {
+	tx *sql.Tx, sheet *sheets.Sheet, sheetHash, date, spreadsheetId string, values [][]interface{},
+) error {
 
 	handler.storage.DeleteDataByDateWithTx(tx, date)
 
@@ -146,7 +148,7 @@ func (handler *SheetsHandler) processSheet(
 
 		_, merged := mergedCells[rowIdx]
 		if merged && len(dataToBeStored) > 0 {
-			curRowData["Ссылка"] = dataToBeStored[len(dataToBeStored)-1].Link
+			curRowData["Ссылка"] = dataToBeStored[len(dataToBeStored)-1].CustomerLink
 		} else if curRowData["Ссылка"] == "" {
 			if curRowData["Сумма"] != "" {
 				log.Printf("Link is missing in an entry with not-null sum: %v, line %v\n",
@@ -156,10 +158,17 @@ func (handler *SheetsHandler) processSheet(
 			}
 		}
 
+		sheetID := sheet.Properties.SheetId
+		rowNumber := rowIdx + 1
+		orderLink := fmt.Sprintf(
+			"https://docs.google.com/spreadsheets/d/%s/edit?gid=%v#gid=%v&range=%v:%v",
+			spreadsheetId, sheetID, sheetID, rowNumber, rowNumber)
+
 		NewDataInstance := &db.Data{
 			Date:      date,
-			RowNumber: rowIdx + 1,
+			RowNumber: rowNumber,
 			IsMerged:  merged,
+			OrderLink: orderLink,
 		}
 
 		if err := PopulateDataStructFromMap(NewDataInstance, curRowData); err != nil {

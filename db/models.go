@@ -7,6 +7,7 @@ type Data struct {
 	RowNumber int
 	Search    string
 	IsMerged  bool
+	OrderLink string
 
 	Payment             string `fieldname:"Оплата"`
 	PVZ                 string `fieldname:"Код ПВЗ"`
@@ -22,7 +23,7 @@ type Data struct {
 	InscriptionBracelet string `fieldname:"Браслет надпись"`
 	Description         string `fieldname:"Описание"`
 	PostCode            string `fieldname:"Индекс"`
-	Link                string `fieldname:"Ссылка"`
+	CustomerLink        string `fieldname:"Ссылка"`
 	TimeTo              string `fieldname:"...время до"`
 	EdgeLower           string `fieldname:"Нижний торец"`
 	DeliveryCost        string `fieldname:"Цена доставки"`

@@ -1,14 +1,19 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/crush-on-anechka/ktn_stats/config"
+	"github.com/crush-on-anechka/ktn_stats/db"
 	"github.com/crush-on-anechka/ktn_stats/messagesender"
 	"github.com/crush-on-anechka/ktn_stats/tasks"
+	"github.com/gorilla/mux"
 )
 
 func main() {
@@ -65,18 +70,67 @@ func runTask(taskFlags map[string]*bool, sender *messagesender.Sender) {
 }
 
 func startServer(sender *messagesender.Sender) {
-	// http.HandleFunc("/fetch", fetchDataFromDB)
-	// log.Println("Starting HTTP server on :8080")
+	db, err := db.NewSqliteDB()
+	handleError(err, sender, "Failed to establish connection with database")
+	defer db.DB.Close()
 
-	// err := http.ListenAndServe(":8080", nil)
-	// handleError(err, sender, "Failed to start HTTP server")
+	r := mux.NewRouter()
+
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./static/index.html")
+	})
+
+	r.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
+		fetchDataFromDB(w, r, db)
+	})
+
+	handleSuccess(sender, "Starting HTTP server on :8080")
+
+	err = http.ListenAndServe(":8080", r)
+	handleError(err, sender, "Failed to start HTTP server")
 }
 
-// func fetchDataFromDB(w http.ResponseWriter, r *http.Request) {
-// 	name := r.URL.Query().Get("name")
+func fetchDataFromDB(w http.ResponseWriter, r *http.Request, db *db.SqliteDB) {
+	query := r.URL.Query().Get("search")
+	whole_phrase := r.URL.Query().Get("whole_phrase") != ""
 
-// 	// Write response
-// 	w.Header().Set("Content-Type", "application/json")
-// 	w.WriteHeader(http.StatusOK)
-// 	fmt.Fprintf(w, `{"message": "Hello, %s!"}`, name)
-// }
+	w.Header().Set("Content-Type", "application/json")
+
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	// TODO: set these up
+	page := 1
+	limit := 10
+
+	if pageStr != "" {
+		page, _ = strconv.Atoi(pageStr)
+	}
+	if limitStr != "" {
+		limit, _ = strconv.Atoi(limitStr)
+	}
+
+	result, err := db.GetOrdersBySearch(query, whole_phrase)
+	if err != nil {
+		http.Error(w, "Failed to fetch data", http.StatusInternalServerError)
+	}
+
+	start := (page - 1) * limit
+	end := start + limit
+
+	if start > len(result) {
+		http.Error(w, "Page out of range", http.StatusBadRequest)
+		return
+	}
+	if end > len(result) {
+		end = len(result)
+	}
+
+	paginatedResult := result[start:end]
+
+	if err := json.NewEncoder(w).Encode(paginatedResult); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}

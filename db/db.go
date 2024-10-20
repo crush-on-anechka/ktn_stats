@@ -311,14 +311,13 @@ func (sqlite *SqliteDB) DeleteDataByDateWithTx(tx *sql.Tx, date string) error {
 
 // GetEssentialValues fetches values from all relevant fields containing inscriptions
 func (sqlite *SqliteDB) GetInscriptionsByDate(date string) ([]string, error) {
-	// TODO: refactor when all types and subtypes will be stored in DB as lowercase
 	query := fmt.Sprintf(
 		`SELECT Inscription, EdgeLower, EdgeUpper, Pendant, Ring, InscriptionBracelet
 		FROM %s
 		WHERE Date = ?
 		AND Type NOT IN (
-			'Кольцо с камнем', 'Кольцо-символ', 'Подвеска с камнем', 'Серьги с камнями', 'Серьги',
-			'Символ-браслет', 'Символ-подвеска', 'Шнурок', 'Цепочка', 'Шнурок для адресника'
+			'КОЛЬЦО С КАМНЕМ', 'КОЛЬЦО-СИМВОЛ', 'ПОДВЕСКА С КАМНЕМ', 'СЕРЬГИ С КАМНЯМИ', 'СЕРЬГИ',
+			'СИМВОЛ-БРАСЛЕТ', 'СИМВОЛ-ПОДВЕСКА', 'ШНУРОК', 'ЦЕПОЧКА', 'ШНУРОК ДЛЯ АДРЕСНИКА'
 		)
 		AND SubType NOT LIKE 'капелька%%'
 		AND SubType NOT LIKE '%%апки%%'
@@ -353,6 +352,10 @@ func (sqlite *SqliteDB) GetInscriptionsByDate(date string) ([]string, error) {
 				allInscriptions = append(allInscriptions, value)
 			}
 		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return allInscriptions, nil
@@ -413,5 +416,68 @@ func (sqlite *SqliteDB) GetDates() ([]string, error) {
 		dates = append(dates, date)
 	}
 
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return dates, nil
+}
+
+func (sqlite *SqliteDB) GetOrdersBySearch(searchString string, fullPhrase bool) ([]Data, error) {
+	query := fmt.Sprintf("SELECT * FROM %s WHERE Search LIKE ", config.DataTableName)
+
+	searchStringToUpper := strings.ToUpper(searchString)
+	searchSlice := make([]any, 0)
+
+	if fullPhrase {
+		query += fmt.Sprintf("'%%%s%%'", searchStringToUpper)
+	} else {
+		words := strings.Split(searchStringToUpper, " ")
+		for i := 0; i < len(words); i++ {
+			if i > 0 {
+				query += " OR Search LIKE "
+			}
+			query += fmt.Sprintf("'%%%s%%'", words[i])
+		}
+	}
+
+	query += "ORDER BY Date DESC;"
+
+	rows, err := sqlite.DB.Query(query, searchSlice...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []Data
+
+	for rows.Next() {
+		var entry Data
+		err = rows.Scan(&entry.Date, &entry.RowNumber, &entry.Search, &entry.IsMerged,
+			&entry.OrderLink, &entry.Payment, &entry.PVZ, &entry.Email, &entry.Inscription,
+			&entry.Details, &entry.Texture, &entry.Pendant, &entry.Ring, &entry.ForNotes,
+			&entry.Socials, &entry.FullName, &entry.InscriptionBracelet, &entry.Description,
+			&entry.PostCode, &entry.CustomerLink, &entry.TimeTo, &entry.EdgeLower,
+			&entry.DeliveryCost, &entry.Phone, &entry.Earrings, &entry.City, &entry.TimeFrom,
+			&entry.DeliveryType, &entry.Notes, &entry.BoxberryNumber, &entry.EdgeUpper, &entry.Type,
+			&entry.Extras, &entry.DeliveryAddress, &entry.ForConfirmation, &entry.Symbol,
+			&entry.Subtype, &entry.Sum, &entry.PickupNumber)
+		if err != nil {
+			return nil, err
+		}
+
+		entries = append(entries, entry)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
+// TODO normalize phone number for WhatsApp links and ToUpper cyrillic names for hidden Telegram
+// and livemaster
+func (sqlite *SqliteDB) GetOrdersByCustomerLink() ([]string, error) {
+	return nil, nil
 }

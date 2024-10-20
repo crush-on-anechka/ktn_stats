@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Нил - поиск по базе</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background-color: #343541;
+            color: #d1d5db;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: auto;
+        }
+        .container {
+            background-color: #40414f;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 900px;
+            width: 100%;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+        h1 {
+            color: #d1d5db;
+            text-align: center;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        label {
+            color: #d1d5db;
+            font-weight: 500;
+        }
+        input[type="text"], input[type="checkbox"] {
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background-color: #565869;
+            color: #d1d5db;
+        }
+        button {
+            background-color: #508496;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2c5968;
+        }
+        table {
+            width: 100%;
+            margin-top: 20px;
+            max-height: 300px;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #565869;
+        }
+        th {
+            background-color: #565869;
+        }
+        td {
+            background-color: #40414f;
+        }
+        a {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            color: #75adbc;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            color: #508496;
+        }
+        .pagination {
+            margin-top: 20px;
+            display: none;
+            justify-content: space-between;
+        }
+        .left {
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <form action="/search" method="get" style="max-width: 300px; margin: 0 auto;">
+            <label for="query">Я ищу:</label>
+            <input type="text" id="query" name="search" required>
+
+            <label for="whole_phrase">
+                <input type="checkbox" id="whole_phrase" name="whole_phrase">
+                Искать фразу целиком
+            </label>
+
+            <button type="submit">Найти</button>
+        </form>
+
+        <div id="results">
+            <table id="resultsTable" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>Партия</th>
+                        <th>Номер строки</th>
+                        <th>Надпись</th>
+                        <th>Верхний торец</th>
+                        <th>Нижний торец</th>
+                        <th>Тип</th>
+                        <th>Ссылка</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        
+            <div class="pagination">
+                <button id="prevPage"><<<</button>
+                <span id="pageInfo"></span>
+                <button id="nextPage">>>></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        const limit = 10;
+
+        document.querySelector('form').onsubmit = async function(e) {
+            e.preventDefault();
+            currentPage = 1;
+            fetchResults();
+        };
+
+        document.getElementById('prevPage').onclick = function() {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchResults();
+            }
+        };
+
+        document.getElementById('nextPage').onclick = function() {
+            currentPage++;
+            fetchResults();
+        };
+
+        async function fetchResults() {
+            const query = document.getElementById('query').value;
+            const wholePhrase = document.getElementById('whole_phrase').checked;
+
+            const params = new URLSearchParams({
+                search: query,
+                whole_phrase: wholePhrase ? 'on' : '',
+                page: currentPage,
+                limit: limit
+            });
+
+            const response = await fetch('/search?' + params.toString());
+            const results = await response.json();
+
+            const resultsTable = document.getElementById('resultsTable');
+            const tbody = resultsTable.querySelector('tbody');
+            tbody.innerHTML = '';
+
+            document.getElementById('pageInfo').textContent = `Страница ${currentPage}`;
+            document.getElementById('prevPage').disabled = currentPage === 1;
+            document.getElementById('nextPage').disabled = results.length < limit;
+
+            if (results.length > 0) {
+                results.forEach(result => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${result.Date}</td>
+                        <td>${result.RowNumber}</td>
+                        <td class="left">${result.Inscription}</td>
+                        <td class="left">${result.EdgeUpper}</td>
+                        <td class="left">${result.EdgeLower}</td>
+                        <td>${result.Type}</td>
+                        <td><a href="${result.OrderLink}" target="_blank">перейти</a></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                resultsTable.style.display = 'table';
+                document.querySelector('.pagination').style.display = 'flex';
+            } else {
+                resultsTable.style.display = 'none';
+                document.querySelector('.pagination').style.display = 'none';
+            }
+        };
+    </script>
+</body>
+</html>

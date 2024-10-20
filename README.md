@@ -3,11 +3,12 @@
 Stores ktn google sheets data in a SQLite DB. Provides frequent updates and optimized search
 
 ## launch
-- go run cmd/main.go -store_latest
-- go run cmd/main.go -store_all
-- go run cmd/main.go -init_db
-- go run cmd/main.go -check_fields
-- go run cmd/main.go -update_essentials
+- go run ./cmd --web
+- go run ./cmd --task -store_latest
+- go run ./cmd --task -store_all
+- go run ./cmd --task -init_db
+- go run ./cmd --task -check_fields
+- go run ./cmd --task -update_essentials
 
 ## Google sheets constraints
 - only sheets which name starts with date (eg "20.04 Аня" or "3.12") will be parsed, so sheets with names like "июнь1" will be skipped
@@ -28,7 +29,7 @@ Optional:
 - SQLitePath (default - "./ktn.db")
 
 ## DB
-- merged cells are stored as empty values except for the first one.
+- in case if "link" column is merged in Google sheet, field "IsMerged" becomes "true" for merged rows except for the first one, and only the "link" field is populated with the same value for all of the merged rows in DB. To count values from "link" it's necessary to exclude rows where "IsMerged" == "true" because those will be duplicates of the same order
 
 ___
 _sent from my iPhon_
