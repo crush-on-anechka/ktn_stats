@@ -32,7 +32,7 @@ Optional:
 - APIPort (default - 8000)
 
 ## DB
-- in case if "link" column is merged in Google sheet, field "IsMerged" becomes "true" for merged rows except for the first one, and only the "link" field is populated with the same value for all of the merged rows in DB. To count values from "link" it's necessary to exclude rows where "IsMerged" == "true" because those will be duplicates of the same order
+- in case if "CustomerLink" column is merged in Google sheet, field "IsMerged" becomes "true" for merged rows except for the first one, and fields "CustomerLink", "Socials", "FullName", "DeliveryAddress" and "Phone" are populated with the most recent value for all of the merged rows in DB. To count values from "link" it's necessary to exclude rows where "IsMerged" == "true" because those will be duplicates of the same order
 
 ___
 _sent from my iPhon_

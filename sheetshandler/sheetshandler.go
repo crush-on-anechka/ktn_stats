@@ -149,6 +149,10 @@ func (handler *SheetsHandler) processSheet(
 		_, merged := mergedCells[rowIdx]
 		if merged && len(dataToBeStored) > 0 {
 			curRowData["Ссылка"] = dataToBeStored[len(dataToBeStored)-1].CustomerLink
+			curRowData["Соцсеть"] = dataToBeStored[len(dataToBeStored)-1].Socials
+			curRowData["ФИО"] = dataToBeStored[len(dataToBeStored)-1].FullName
+			curRowData["Адрес доставки"] = dataToBeStored[len(dataToBeStored)-1].DeliveryAddress
+			curRowData["Телефон"] = dataToBeStored[len(dataToBeStored)-1].Phone
 		} else if curRowData["Ссылка"] == "" {
 			if curRowData["Сумма"] != "" {
 				log.Printf("Link is missing in an entry with not-null sum: %v, line %v\n",

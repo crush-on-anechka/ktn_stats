@@ -42,4 +42,5 @@ var (
 	ErrNoRecordFound       = errors.New("no record found")
 	DatePatternRegex       = regexp.MustCompile(`\b(\d{1,2})\.(\d{1,2})\b`)
 	LowercaseCyrillicRegex = regexp.MustCompile(`[а-я]`)
+	LettersRegex           = regexp.MustCompile(`[a-zA-Zа-яА-Я]`)
 )

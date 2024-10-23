@@ -27,7 +27,7 @@
             margin-top: 20px;
         }
         h1 {
-            color: #d1d5db;
+            color: #dbd1d1;
             text-align: center;
             font-weight: 600;
             margin-bottom: 20px;
@@ -106,11 +106,21 @@
 <body>
     <div class="container">
         <form action="/search" method="get" style="max-width: 300px; margin: 0 auto;">
-            <label for="query">Я ищу:</label>
-            <input type="text" id="query" name="search" required>
+            <label for="query">Искать</label>
 
-            <label for="whole_phrase">
-                <input type="checkbox" id="whole_phrase" name="whole_phrase">
+            <label for="searchTypeInscription">
+                <input type="radio" id="searchTypeInscription" name="searchType" value="byInscription" checked>
+                надпись
+            </label>
+            
+            <label for="searchTypeCustomer">
+                <input type="radio" id="searchTypeCustomer" name="searchType" value="byCustomer">
+                покупателя
+            </label>
+            <input type="text" id="query" name="search" required>
+        
+            <label for="wholePhrase" id="wholePhraseLabel">
+                <input type="checkbox" id="wholePhrase" name="wholePhrase">
                 Искать фразу целиком
             </label>
 
@@ -123,9 +133,8 @@
                     <tr>
                         <th>Партия</th>
                         <th>Номер строки</th>
-                        <th>Надпись</th>
-                        <th>Верхний торец</th>
-                        <th>Нижний торец</th>
+                        <th>Покупатель</th>
+                        <th>Надписи</th>
                         <th>Тип</th>
                         <th>Ссылка</th>
                     </tr>
@@ -167,13 +176,34 @@
             fetchResults();
         };
 
+        document.addEventListener('DOMContentLoaded', function () {
+            const searchTypeInscription = document.getElementById('searchTypeInscription');
+            const searchTypeCustomer = document.getElementById('searchTypeCustomer');
+            const wholePhraseLabel = document.getElementById('wholePhraseLabel');
+
+            function toggleWholePhraseVisibility() {
+                if (searchTypeCustomer.checked) {
+                    wholePhraseLabel.style.display = 'none';
+                } else {
+                    wholePhraseLabel.style.display = 'block';
+                }
+            }
+
+            searchTypeInscription.addEventListener('change', toggleWholePhraseVisibility);
+            searchTypeCustomer.addEventListener('change', toggleWholePhraseVisibility);
+
+            toggleWholePhraseVisibility();
+        });
+
         async function fetchResults() {
             const query = document.getElementById('query').value;
-            const wholePhrase = document.getElementById('whole_phrase').checked;
+            const searchType = document.querySelector('input[name="searchType"]:checked').value;
+            const wholePhraseCheckbox = document.getElementById('wholePhrase');
 
             const params = new URLSearchParams({
                 search: query,
-                whole_phrase: wholePhrase ? 'on' : '',
+                wholePhrase: wholePhraseCheckbox.checked ? 'on' : '',
+                searchType: searchType,
                 page: currentPage,
                 limit: limit
             });
@@ -192,16 +222,47 @@
                 document.getElementById('pageInfo').textContent = `Страница ${currentPage}`;
                 document.getElementById('prevPage').disabled = currentPage === 1;
                 document.getElementById('nextPage').disabled = results.length < limit;
-                
+
+
                 results.forEach(result => {
+                    let date = ``
+                    let year = result.Date.slice(0, 4)
+                    if (result.Date.slice(-5) === "00.00") {
+                        date = year + " НАЛИЧИЕ";
+                    } else if (result.Date.slice(-5) === "00.01") {
+                        date = year + " СРОЧНЫЕ";
+                    } else {
+                        date = result.Date.slice(-2) + "." + result.Date.slice(5, 7) + "." + year;
+                    }
+
+                    let content = `${result.Inscription}`;
+                    if (result.EdgeUpper) {
+                        content += `<br><span style="color: #d89b9b;">Верхний торец:</span> ${result.EdgeUpper}`;
+                    }
+                    if (result.EdgeLower) {
+                        content += `<br><span style="color: #d89b9b;">Нижний торец:</span> ${result.EdgeLower}`;
+                    }
+
+                    let contacts = `${result.Socials}: <span style="color: #d89b9b;">${result.CustomerLink}</span>`;
+                    if (result.FullName) {
+                        contacts += `<br>${result.FullName}`;
+                    }
+                    if (result.Phone) {
+                        contacts += `<br>${result.Phone}`;
+                    }
+
+                    let itemType = `${result.Type}`;
+                    if (result.Subtype) {
+                        itemType += `<br>${result.Subtype}`;
+                    }
+
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${result.Date}</td>
+                        <td>${date}</td>
                         <td>${result.RowNumber}</td>
-                        <td class="left">${result.Inscription}</td>
-                        <td class="left">${result.EdgeUpper}</td>
-                        <td class="left">${result.EdgeLower}</td>
-                        <td>${result.Type}</td>
+                        <td class="left">${contacts}</td>
+                        <td class="left">${content}</td>
+                        <td>${itemType}</td>
                         <td><a href="${result.OrderLink}" target="_blank">перейти</a></td>
                     `;
                     tbody.appendChild(row);

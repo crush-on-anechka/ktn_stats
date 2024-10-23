@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unicode"
 
 	"github.com/crush-on-anechka/ktn_stats/config"
 	_ "github.com/mattn/go-sqlite3"
@@ -427,7 +428,6 @@ func (sqlite *SqliteDB) GetOrdersBySearch(searchString string, fullPhrase bool) 
 	query := fmt.Sprintf("SELECT * FROM %s WHERE Search LIKE ", config.DataTableName)
 
 	searchStringToUpper := strings.ToUpper(searchString)
-	searchSlice := make([]any, 0)
 
 	if fullPhrase {
 		query += fmt.Sprintf("'%%%s%%'", searchStringToUpper)
@@ -441,9 +441,40 @@ func (sqlite *SqliteDB) GetOrdersBySearch(searchString string, fullPhrase bool) 
 		}
 	}
 
-	query += "ORDER BY Date DESC;"
+	query += "ORDER BY Date DESC, RowNumber ASC;"
 
-	rows, err := sqlite.DB.Query(query, searchSlice...)
+	return executeQuery(sqlite, query)
+}
+
+func (sqlite *SqliteDB) GetOrdersByCustomer(searchString string) ([]Data, error) {
+	query := fmt.Sprintf("SELECT * FROM %s ", config.DataTableName)
+
+	if !config.LettersRegex.MatchString(searchString) {
+		var builder strings.Builder
+
+		for _, char := range searchString {
+			if unicode.IsDigit(char) {
+				if builder.Len() > 0 {
+					builder.WriteRune('%')
+				}
+				builder.WriteRune(char)
+			}
+		}
+
+		searchString = builder.String()
+	}
+
+	query += fmt.Sprintf(
+		`WHERE CustomerLink LIKE "%%%s%%" OR Phone LIKE "%%%s%%" OR FullName LIKE "%%%s%%" OR
+		DeliveryAddress LIKE "%%%s%%"`, searchString, searchString, searchString, searchString)
+
+	query += "ORDER BY Date DESC, RowNumber ASC;"
+
+	return executeQuery(sqlite, query)
+}
+
+func executeQuery(sqlite *SqliteDB, query string) ([]Data, error) {
+	rows, err := sqlite.DB.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -474,10 +505,4 @@ func (sqlite *SqliteDB) GetOrdersBySearch(searchString string, fullPhrase bool) 
 	}
 
 	return entries, nil
-}
-
-// TODO normalize phone number for WhatsApp links and ToUpper cyrillic names for hidden Telegram
-// and livemaster
-func (sqlite *SqliteDB) GetOrdersByCustomerLink() ([]string, error) {
-	return nil, nil
 }

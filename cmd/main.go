@@ -90,9 +90,9 @@ func startServer(sender *messagesender.Sender) {
 	handleError(err, sender, "Failed to start HTTP server")
 }
 
-func fetchDataFromDB(w http.ResponseWriter, r *http.Request, db *db.SqliteDB) {
+func fetchDataFromDB(w http.ResponseWriter, r *http.Request, storage *db.SqliteDB) {
 	query := r.URL.Query().Get("search")
-	whole_phrase := r.URL.Query().Get("whole_phrase") != ""
+	wholePhrase := r.URL.Query().Get("wholePhrase") != ""
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -110,7 +110,16 @@ func fetchDataFromDB(w http.ResponseWriter, r *http.Request, db *db.SqliteDB) {
 		limit, _ = strconv.Atoi(limitStr)
 	}
 
-	result, err := db.GetOrdersBySearch(query, whole_phrase)
+	searchType := r.URL.Query().Get("searchType")
+
+	var result []db.Data
+	var err error
+
+	if searchType == "byInscription" {
+		result, err = storage.GetOrdersBySearch(query, wholePhrase)
+	} else if searchType == "byCustomer" {
+		result, err = storage.GetOrdersByCustomer(query)
+	}
 	if err != nil {
 		http.Error(w, "Failed to fetch data", http.StatusInternalServerError)
 	}
