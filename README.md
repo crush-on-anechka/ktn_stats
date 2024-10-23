@@ -6,6 +6,7 @@ Stores ktn google sheets data in a SQLite DB. Provides frequent updates and opti
 - go run ./cmd --web
 
 ## run tasks
+- go run ./cmd --task -store_by_year -year=2024
 - go run ./cmd --task -store_latest
 - go run ./cmd --task -store_all
 - go run ./cmd --task -init_db

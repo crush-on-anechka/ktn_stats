@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	taskMode, webMode, taskFlags := initFlags()
+	taskMode, webMode, taskFlags, year := initFlags()
 
 	botToken := config.Envs.TelegramToken
 	chatID := int64(config.Envs.TelegramChatID)
@@ -29,13 +29,13 @@ func main() {
 	if *webMode {
 		startServer(sender)
 	} else if *taskMode {
-		runTask(taskFlags, sender)
+		runTask(taskFlags, year, sender)
 	} else {
 		log.Println("No mode specified. Use --task or --web")
 	}
 }
 
-func runTask(taskFlags map[string]*bool, sender *messagesender.Sender) {
+func runTask(taskFlags map[string]*bool, year *string, sender *messagesender.Sender) {
 	switch {
 	case *taskFlags["init_db"]:
 		err := tasks.InitDB()
@@ -56,6 +56,15 @@ func runTask(taskFlags map[string]*bool, sender *messagesender.Sender) {
 		err := tasks.StoreLatestSpreadsheet()
 		handleError(err, sender, "Failed to store latest spreadsheet data")
 		handleSuccess(sender, "Latest spreadsheet data was successfully stored")
+
+	case *taskFlags["store_by_year"]:
+		if *year == "" {
+			log.Println("You must provide year using -year")
+			os.Exit(1)
+		}
+		err := tasks.StoreSpreadsheet(*year)
+		handleError(err, sender, "Failed to store spreadsheet data")
+		handleSuccess(sender, "Spreadsheet data was successfully stored")
 
 	case *taskFlags["update_essentials"]:
 		err := tasks.UpdateEssentials()

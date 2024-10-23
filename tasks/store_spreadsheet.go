@@ -2,7 +2,7 @@ package tasks
 
 import (
 	"fmt"
-	"time"
+	"strconv"
 
 	"github.com/crush-on-anechka/ktn_stats/config"
 	"github.com/crush-on-anechka/ktn_stats/db"
@@ -10,7 +10,7 @@ import (
 	"github.com/crush-on-anechka/ktn_stats/sheetshandler"
 )
 
-func StoreAllSpreadsheets() error {
+func StoreSpreadsheet(year string) error {
 	storage, err := db.NewSqliteDB()
 	if err != nil {
 		return fmt.Errorf("failed to establish connection with database: %w", err)
@@ -19,19 +19,15 @@ func StoreAllSpreadsheets() error {
 
 	essentialsHandler := essentialshandler.New(storage)
 
-	sheetsHandler, err := sheetshandler.New(storage, config.SafeRequestTimeout, essentialsHandler)
+	sheetsHandler, err := sheetshandler.New(storage, config.GreedyRequestTimeout, essentialsHandler)
 	if err != nil {
 		return fmt.Errorf("failed to create sheetshandler: %w", err)
 	}
 
-	currentYear := time.Now().Year()
-
-	for year := config.StartYear; year <= currentYear; year++ {
-		err := sheetsHandler.StoreSpreadsheetByYear(year)
-		if err != nil {
-			return fmt.Errorf("failed to store %v spreadsheet: %w", year, err)
-		}
+	yearAsInt, err := strconv.Atoi(year)
+	if err != nil {
+		return fmt.Errorf("failed to parse year: %w", err)
 	}
 
-	return nil
+	return sheetsHandler.StoreSpreadsheetByYear(yearAsInt)
 }
